@@ -1,13 +1,21 @@
-use std::{path::Path, time::{SystemTime, UNIX_EPOCH}};
 use rusqlite::{params, Connection, Result, Transaction};
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
 }
 
 pub fn connect(path: &Path) -> Result<Connection> {
     let connection = Connection::open(path)?;
-    connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;")?;
+    connection.execute_batch(
+        "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;",
+    )?;
     Ok(connection)
 }
 
@@ -15,6 +23,7 @@ pub fn bootstrap(path: &Path) -> Result<()> {
     let mut connection = connect(path)?;
     migrate(&connection)?;
     seed(&mut connection)?;
+    reconcile_interrupted_runs(&mut connection)?;
     Ok(())
 }
 
@@ -94,29 +103,108 @@ fn migrate(connection: &Connection) -> Result<()> {
     "#)
 }
 
+/// Conservatively release work that was active when the desktop process exited.
+/// Completed files and reviewed tasks are never changed; an interrupted running
+/// task becomes ready for its bounded manager to retry on the next desktop boot.
+fn reconcile_interrupted_runs(connection: &mut Connection) -> Result<()> {
+    let now = now_ms();
+    let transaction = connection.transaction()?;
+    let interrupted = transaction.execute(
+        "UPDATE agent_runs SET status = 'cancelled', error_code = 'desktop_restart', completed_at = ?1 WHERE status = 'running'",
+        params![now],
+    )?;
+    if interrupted > 0 {
+        transaction.execute(
+            "UPDATE agents SET status = 'idle' WHERE status = 'busy'",
+            [],
+        )?;
+        transaction.execute(
+            "UPDATE tasks SET status = 'ready', review_notes = COALESCE(review_notes, 'Interrupted by desktop restart; ready for governed retry.'), updated_at = ?1 WHERE status = 'in_progress' AND output_path IS NULL",
+            params![now],
+        )?;
+        append_audit_tx(
+            &transaction,
+            "system",
+            "reconcile_restart",
+            None,
+            Some("Released interrupted agent runs and returned unfinished tasks to ready."),
+            now,
+        )?;
+    }
+    transaction.commit()
+}
+
 fn seed(connection: &mut Connection) -> Result<()> {
     let count: i64 = connection.query_row("SELECT COUNT(*) FROM clients", [], |row| row.get(0))?;
-    if count > 0 { return Ok(()); }
+    if count > 0 {
+        return Ok(());
+    }
     let timestamp = now_ms();
     let transaction = connection.transaction()?;
     seed_clients_and_projects(&transaction, timestamp)?;
     seed_agents(&transaction, timestamp)?;
-    append_audit_tx(&transaction, "system", "seed_database", None, Some("Created demo business records and managed agent roster."), timestamp)?;
+    append_audit_tx(
+        &transaction,
+        "system",
+        "seed_database",
+        None,
+        Some("Created demo business records and managed agent roster."),
+        timestamp,
+    )?;
     transaction.commit()
 }
 
 fn seed_clients_and_projects(transaction: &Transaction<'_>, timestamp: i64) -> Result<()> {
     for (id, name, industry, status, owner) in [
-        ("seed-client-acme", "Acme Corp", "Enterprise SaaS", "active", "Priya Shah"),
-        ("seed-client-northstar", "Northstar Health", "Healthcare", "active", "Daniel Reed"),
-        ("seed-client-meridian", "Meridian Retail", "Retail", "prospect", "Priya Shah"),
+        (
+            "seed-client-acme",
+            "Acme Corp",
+            "Enterprise SaaS",
+            "active",
+            "Priya Shah",
+        ),
+        (
+            "seed-client-northstar",
+            "Northstar Health",
+            "Healthcare",
+            "active",
+            "Daniel Reed",
+        ),
+        (
+            "seed-client-meridian",
+            "Meridian Retail",
+            "Retail",
+            "prospect",
+            "Priya Shah",
+        ),
     ] {
         transaction.execute("INSERT INTO clients (id, name, industry, status, owner, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![id, name, industry, status, owner, timestamp])?;
     }
     for (id, client_id, name, stage, value, risk_flag) in [
-        ("seed-project-acme-expansion", "seed-client-acme", "Q3 Platform Expansion", "Proposal", 240000.0, 0),
-        ("seed-project-acme-analytics", "seed-client-acme", "Analytics Modernization", "Negotiation", 125000.0, 1),
-        ("seed-project-northstar-portal", "seed-client-northstar", "Patient Portal Discovery", "Discovery", 80000.0, 0),
+        (
+            "seed-project-acme-expansion",
+            "seed-client-acme",
+            "Q3 Platform Expansion",
+            "Proposal",
+            240000.0,
+            0,
+        ),
+        (
+            "seed-project-acme-analytics",
+            "seed-client-acme",
+            "Analytics Modernization",
+            "Negotiation",
+            125000.0,
+            1,
+        ),
+        (
+            "seed-project-northstar-portal",
+            "seed-client-northstar",
+            "Patient Portal Discovery",
+            "Discovery",
+            80000.0,
+            0,
+        ),
     ] {
         transaction.execute("INSERT INTO projects (id, client_id, name, stage, value, risk_flag, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![id, client_id, name, stage, value, risk_flag, timestamp])?;
     }
@@ -125,11 +213,46 @@ fn seed_clients_and_projects(transaction: &Transaction<'_>, timestamp: i64) -> R
 
 fn seed_agents(transaction: &Transaction<'_>, timestamp: i64) -> Result<()> {
     let roster = [
-        ("agent-manager", "Asha", "Manager", "manager", r#"["plan_subagents"]"#, "Plan only; never creates sessions, files, or tool calls."),
-        ("agent-market-analyst", "Maya", "Market Analyst", "analyst", r#"["analyze_market_context","create_handoff"]"#, "Analyze supplied local business data and cite source IDs."),
-        ("agent-worker-1", "W-1", "Operations Analyst", "worker", r#"["analyze_operations","create_handoff"]"#, "Prepare exact local pipeline metrics only."),
-        ("agent-worker-2", "W-2", "Document Worker", "worker", r#"["create_presentation","create_document","create_spreadsheet","merge_template"]"#, "Create the single approved Office artifact through the restricted tool."),
-        ("agent-reviewer", "Sentinel", "File Reviewer", "reviewer", r#"["validate_output"]"#, "Check only file policy and parseability."),
+        (
+            "agent-manager",
+            "Asha",
+            "Manager",
+            "manager",
+            r#"["plan_subagents"]"#,
+            "Plan only; never creates sessions, files, or tool calls.",
+        ),
+        (
+            "agent-market-analyst",
+            "Maya",
+            "Market Analyst",
+            "analyst",
+            r#"["analyze_market_context","create_handoff"]"#,
+            "Analyze supplied local business data and cite source IDs.",
+        ),
+        (
+            "agent-worker-1",
+            "W-1",
+            "Operations Analyst",
+            "worker",
+            r#"["analyze_operations","create_handoff"]"#,
+            "Prepare exact local pipeline metrics only.",
+        ),
+        (
+            "agent-worker-2",
+            "W-2",
+            "Document Worker",
+            "worker",
+            r#"["create_presentation","create_document","create_spreadsheet","merge_template"]"#,
+            "Create the single approved Office artifact through the restricted tool.",
+        ),
+        (
+            "agent-reviewer",
+            "Sentinel",
+            "File Reviewer",
+            "reviewer",
+            r#"["validate_output"]"#,
+            "Check only file policy and parseability.",
+        ),
     ];
     for (id, name, role, kind, capabilities, prompt) in roster {
         transaction.execute("INSERT INTO agents (id, name, role, agent_kind, capabilities, max_concurrency, system_prompt, status, trust_level, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, 'idle', 'standard', ?7)", params![id, name, role, kind, capabilities, prompt, timestamp])?;
@@ -137,12 +260,25 @@ fn seed_agents(transaction: &Transaction<'_>, timestamp: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn append_audit(connection: &Connection, actor: &str, action: &str, target: Option<&str>, detail: Option<&str>) -> Result<()> {
+pub fn append_audit(
+    connection: &Connection,
+    actor: &str,
+    action: &str,
+    target: Option<&str>,
+    detail: Option<&str>,
+) -> Result<()> {
     connection.execute("INSERT INTO audit_log (actor, action, target, detail, created_at) VALUES (?1, ?2, ?3, ?4, ?5)", params![actor, action, target, detail, now_ms()])?;
     Ok(())
 }
 
-fn append_audit_tx(transaction: &Transaction<'_>, actor: &str, action: &str, target: Option<&str>, detail: Option<&str>, timestamp: i64) -> Result<()> {
+fn append_audit_tx(
+    transaction: &Transaction<'_>,
+    actor: &str,
+    action: &str,
+    target: Option<&str>,
+    detail: Option<&str>,
+    timestamp: i64,
+) -> Result<()> {
     transaction.execute("INSERT INTO audit_log (actor, action, target, detail, created_at) VALUES (?1, ?2, ?3, ?4, ?5)", params![actor, action, target, detail, timestamp])?;
     Ok(())
 }

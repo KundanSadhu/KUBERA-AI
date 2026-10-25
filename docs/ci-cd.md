@@ -6,8 +6,8 @@ KUBERA has two GitHub Actions workflows:
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `CI` | Pull requests, pushes to `main`, manual runs | Checks JavaScript syntax, repository whitespace, and the managed-workforce test |
-| `Windows Desktop` | Pull requests, pushes to `main`, version tags, manual runs | Downloads pinned sidecars, builds a Windows NSIS installer, uploads it as an artifact, and publishes tagged releases |
+| `CI` | Pull requests, pushes to `main`, manual runs | Checks JavaScript syntax, repository whitespace, deterministic workforce behavior, and the desktop SQLite persistence contract |
+| `Windows Desktop` | Pull requests, pushes to `main`, version tags, manual runs | Verifies frontend/workforce tests and Rust formatting, compile-checks the Windows Tauri core, downloads pinned sidecars, builds a Windows NSIS installer, uploads it as an artifact, and publishes tagged releases |
 
 ## Windows build contents
 
@@ -56,4 +56,6 @@ Edit `OPENCODE_VERSION` and `OFFICECLI_VERSION` in `.github/workflows/windows-de
 
 ## Current limitation
 
-The source has not been compiled in this workspace because the Rust toolchain and Windows sidecars are unavailable locally. The workflow is designed to perform the first Windows compile and package verification on GitHub-hosted Windows runners.
+Rust source formatting and Cargo-manifest parsing are checked in this workspace. A native Linux Tauri compile requires unavailable GTK/GDK system libraries, and a Windows cross-check requires the Microsoft Windows SDK/linker. The Windows workflow therefore remains the authoritative native compilation, sidecar, and installer verification environment.
+
+Before a release tag, verify one packaged Windows mission end-to-end: SQLite state survives a restart, the loopback OpenCode manager session receives an event, and OfficeCLI produces a nonempty `.pptx` under the KUBERA report root.

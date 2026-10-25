@@ -1,12 +1,13 @@
 import { createStore } from './store.js';
 import { createSeedState } from './seed.js';
 import { createPrototypeApi } from './api.js';
+import { createApplicationApi } from './desktop-api.js';
 import { startMission, saveSchedule, toggleSchedule } from './orchestration.js';
 import { escapeHtml, fileIcon, formatCurrency, formatDate, formatDateTime, id, relativeTime, statusTone } from './formatters.js';
 
 const root = document.querySelector('#app');
 const store = createStore(createSeedState);
-const api = createPrototypeApi(store);
+const api = createApplicationApi(store, createPrototypeApi);
 
 const navItems = [
   ['missions', 'Missions', '◈'],
@@ -357,4 +358,15 @@ root.addEventListener('change', (event) => {
 });
 
 store.subscribe(render);
-api.bootstrap().then(() => render(api.getState()));
+api.bootstrap().then(() => {
+  render(api.getState());
+  if (typeof api.subscribeOpenCodeEvents === 'function') {
+    api.subscribeOpenCodeEvents((event) => {
+      const eventType = typeof event?.type === 'string' ? event.type : 'event';
+      api.update((next) => {
+        next.activity.unshift({ id: id('opencode'), at: Date.now(), kind: 'opencode_event', tone: 'neutral', text: `OpenCode event received: ${eventType}.` });
+        next.activity = next.activity.slice(0, 60);
+      });
+    }).catch((error) => console.warn('OpenCode event subscription failed', error));
+  }
+});

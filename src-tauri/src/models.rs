@@ -138,3 +138,30 @@ pub struct NewSchedule {
     pub timezone: String,
     pub deliverable_type: Option<String>,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeckSlide {
+    pub title: String,
+    #[serde(default)]
+    pub bullets: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDeckRequest {
+    pub task_id: String,
+    pub file_name: String,
+    pub title: String,
+    pub slides: Vec<DeckSlide>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficeExecution {
+    pub file_name: String,
+    pub relative_path: String,
+    pub file_type: String,
+    pub bytes: u64,
+    pub summary: String,
+}

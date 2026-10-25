@@ -40,6 +40,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
 
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@v2
@@ -50,10 +51,19 @@ jobs:
         run: |
           npm run check
           npm run test:agents
+          npm run test:desktop
+
+      - name: Verify Rust formatting and desktop contracts
+        shell: pwsh
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
       - name: Prepare pinned OpenCode and OfficeCLI Windows sidecars
         shell: pwsh
         run: ./scripts/ci/prepare-windows-sidecars.ps1
+
+      - name: Compile-check the Windows desktop core
+        shell: pwsh
+        run: cargo check --manifest-path src-tauri/Cargo.toml --target $env:TAURI_TARGET
 
       - name: Install Tauri CLI
         shell: pwsh

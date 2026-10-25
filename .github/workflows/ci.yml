@@ -33,5 +33,7 @@ jobs:
       - name: Check JavaScript modules
         run: npm run check
 
-      - name: Exercise managed workforce
-        run: npm run test:agents
+      - name: Exercise managed workforce and desktop persistence contract
+        run: |
+          npm run test:agents
+          npm run test:desktop
