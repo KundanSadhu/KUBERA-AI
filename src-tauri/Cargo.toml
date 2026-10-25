@@ -1,0 +1,32 @@
+[package]
+name = "kubera-ai"
+version = "0.1.0"
+description = "KUBERA AI local-first business operations desktop app"
+authors = ["KUBERA AI contributors"]
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+name = "kubera_ai_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "kubera-ai"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Add when the persistent scheduler slice is wired to Tauri events:
+# tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+# tokio-cron-scheduler = "0.13"
+# chrono = { version = "0.4", features = ["serde"] }

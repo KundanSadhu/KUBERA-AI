@@ -1,0 +1,32 @@
+# Dependencies and generated files
+node_modules/
+dist/
+build/
+coverage/
+
+# Local application data and development secrets
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+reports/
+templates/
+logs/
+
+# Bundled third-party binaries (download separately per target)
+src-tauri/binaries/
+
+# Keys and credentials: never commit deploy/private keys
+.deploy-keys/*.pem
+.deploy-keys/*.key
+.deploy-keys/*_ed25519
+*.pem
+*.key
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
