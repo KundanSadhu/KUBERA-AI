@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "ai.kubera.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm --prefix .. run dev",
     "devUrl": "http://localhost:4173",
-    "beforeBuildCommand": "npm run check",
+    "beforeBuildCommand": "npm --prefix .. run check",
     "frontendDist": "../src"
   },
   "app": {
@@ -31,6 +31,9 @@
     "externalBin": [
       "binaries/opencode-cli",
       "binaries/officecli"
+    ],
+    "icon": [
+      "icons/icon.ico"
     ]
   }
 }

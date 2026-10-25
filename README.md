@@ -56,6 +56,7 @@ Once Rust and Tauri prerequisites are installed:
 
 ```bash
 npm install
+cd src-tauri
 cargo tauri dev
 ```
 

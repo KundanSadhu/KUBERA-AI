@@ -1,0 +1,91 @@
+name: Windows Desktop
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENCODE_VERSION: v1.19.4
+  OFFICECLI_VERSION: v1.0.152
+  TAURI_TARGET: x86_64-pc-windows-msvc
+
+jobs:
+  build-windows:
+    name: Build Windows NSIS installer
+    runs-on: windows-latest
+    permissions:
+      contents: write # Required only when a version tag creates a GitHub Release.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Verify frontend and local agent workflow
+        run: |
+          npm run check
+          npm run test:agents
+
+      - name: Prepare pinned OpenCode and OfficeCLI Windows sidecars
+        shell: pwsh
+        run: ./scripts/ci/prepare-windows-sidecars.ps1
+
+      - name: Install Tauri CLI
+        shell: pwsh
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build Windows NSIS installer
+        working-directory: src-tauri
+        shell: pwsh
+        run: cargo tauri build --target $env:TAURI_TARGET --bundles nsis
+
+      - name: Create checksums
+        shell: pwsh
+        run: |
+          $bundle = Get-ChildItem -Path "src-tauri/target/$env:TAURI_TARGET/release/bundle/nsis" -Filter *.exe | Select-Object -First 1
+          if (-not $bundle) { throw "NSIS installer was not produced." }
+          Get-FileHash -Algorithm SHA256 $bundle.FullName | ForEach-Object { "$($_.Hash.ToLower())  $($bundle.Name)" } | Set-Content -NoNewline "$($bundle.FullName).sha256"
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubera-ai-windows-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/${{ env.TAURI_TARGET }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ env.TAURI_TARGET }}/release/bundle/nsis/*.sha256
+            src-tauri/binaries/sidecar-manifest.json
+
+      - name: Publish tagged Windows release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            src-tauri/target/${{ env.TAURI_TARGET }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ env.TAURI_TARGET }}/release/bundle/nsis/*.sha256

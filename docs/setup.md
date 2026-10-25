@@ -90,6 +90,7 @@ Once `src-tauri` is implemented and Rust is installed:
 
 ```bash
 npm install
+cd src-tauri
 cargo tauri dev
 ```
 
@@ -104,7 +105,8 @@ Expected boot sequence:
 ## 6. Package the host platform
 
 ```bash
-cargo tauri build
+cd src-tauri
+cargo tauri build --bundles nsis
 ```
 
 Before shipping, run the demo script twice from a clean launch and open every generated Office artifact in a native Office-compatible application.
