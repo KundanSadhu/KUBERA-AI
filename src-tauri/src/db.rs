@@ -78,6 +78,13 @@ fn migrate(connection: &Connection) -> Result<()> {
         file_name TEXT NOT NULL, file_type TEXT NOT NULL CHECK (file_type IN ('docx', 'xlsx', 'pptx', 'pdf')),
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS deliverable_approvals (
+        id TEXT PRIMARY KEY, deliverable_id TEXT NOT NULL REFERENCES deliverables(id),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        requested_by TEXT NOT NULL, decision_note TEXT, requested_at INTEGER NOT NULL, decided_at INTEGER
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_deliverable_approvals_pending
+        ON deliverable_approvals(deliverable_id) WHERE status = 'pending';
       CREATE TABLE IF NOT EXISTS schedules (
         id TEXT PRIMARY KEY, requirement_text TEXT NOT NULL, cron_expression TEXT NOT NULL,
         timezone TEXT NOT NULL DEFAULT 'Asia/Calcutta', deliverable_type TEXT CHECK (deliverable_type IN ('docx', 'xlsx', 'pptx', 'pdf')),
@@ -89,6 +96,19 @@ fn migrate(connection: &Connection) -> Result<()> {
         file_type TEXT NOT NULL CHECK (file_type IN ('docx', 'xlsx', 'pptx')),
         placeholders_json TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS research_citations (
+        id TEXT PRIMARY KEY, provider TEXT NOT NULL CHECK (provider IN ('crossref')),
+        query TEXT NOT NULL, title TEXT NOT NULL, citation_url TEXT NOT NULL,
+        publisher TEXT, published_year INTEGER, fetched_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_research_citations_fetched ON research_citations(fetched_at DESC);
+      CREATE TABLE IF NOT EXISTS deliveries (
+        id TEXT PRIMARY KEY, deliverable_id TEXT NOT NULL REFERENCES deliverables(id),
+        channel TEXT NOT NULL CHECK (channel IN ('email_smtp', 'slack_upload')),
+        recipient TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'failed')),
+        requested_at INTEGER NOT NULL, completed_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_deliveries_deliverable ON deliveries(deliverable_id, requested_at DESC);
       CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL,
         target TEXT, detail TEXT, created_at INTEGER NOT NULL
@@ -136,10 +156,15 @@ fn reconcile_interrupted_runs(connection: &mut Connection) -> Result<()> {
 
 fn seed(connection: &mut Connection) -> Result<()> {
     let count: i64 = connection.query_row("SELECT COUNT(*) FROM clients", [], |row| row.get(0))?;
+    let timestamp = now_ms();
     if count > 0 {
+        let transaction = connection.transaction()?;
+        // Later bounded roster additions must also reach existing local
+        // installations without modifying user business records.
+        seed_agents(&transaction, timestamp)?;
+        transaction.commit()?;
         return Ok(());
     }
-    let timestamp = now_ms();
     let transaction = connection.transaction()?;
     seed_clients_and_projects(&transaction, timestamp)?;
     seed_agents(&transaction, timestamp)?;
@@ -230,6 +255,14 @@ fn seed_agents(transaction: &Transaction<'_>, timestamp: i64) -> Result<()> {
             "Analyze supplied local business data and cite source IDs.",
         ),
         (
+            "agent-market-analyst-2",
+            "Maya-2",
+            "Market Analyst",
+            "analyst",
+            r#"["analyze_market_context","create_handoff"]"#,
+            "Analyze supplied local business data and cite source IDs.",
+        ),
+        (
             "agent-worker-1",
             "W-1",
             "Operations Analyst",
@@ -238,8 +271,24 @@ fn seed_agents(transaction: &Transaction<'_>, timestamp: i64) -> Result<()> {
             "Prepare exact local pipeline metrics only.",
         ),
         (
+            "agent-worker-1b",
+            "W-1B",
+            "Operations Analyst",
+            "worker",
+            r#"["analyze_operations","create_handoff"]"#,
+            "Prepare exact local pipeline metrics only.",
+        ),
+        (
             "agent-worker-2",
             "W-2",
+            "Document Worker",
+            "worker",
+            r#"["create_presentation","create_document","create_spreadsheet","merge_template"]"#,
+            "Create the single approved Office artifact through the restricted tool.",
+        ),
+        (
+            "agent-worker-2b",
+            "W-2B",
             "Document Worker",
             "worker",
             r#"["create_presentation","create_document","create_spreadsheet","merge_template"]"#,
@@ -255,7 +304,7 @@ fn seed_agents(transaction: &Transaction<'_>, timestamp: i64) -> Result<()> {
         ),
     ];
     for (id, name, role, kind, capabilities, prompt) in roster {
-        transaction.execute("INSERT INTO agents (id, name, role, agent_kind, capabilities, max_concurrency, system_prompt, status, trust_level, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, 'idle', 'standard', ?7)", params![id, name, role, kind, capabilities, prompt, timestamp])?;
+        transaction.execute("INSERT OR IGNORE INTO agents (id, name, role, agent_kind, capabilities, max_concurrency, system_prompt, status, trust_level, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, 'idle', 'standard', ?7)", params![id, name, role, kind, capabilities, prompt, timestamp])?;
     }
     Ok(())
 }

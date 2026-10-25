@@ -100,20 +100,20 @@ The downstream document worker sees only accepted, relevant handoffs. It never t
 
 A schedule saves requirement text, output type, cron expression, timezone, enabled flag, last run, and next run.
 
-1. Rust registers enabled schedules on app startup.
-2. At the cron tick, Rust emits a Tauri `schedule-fired` event.
-3. JS creates a normal requirement from the stored text.
-4. The mission repeats against the current local records.
-5. The scheduler persists `last_run` and recalculates `next_run`.
+1. The desktop renderer subscribes to `schedule-fired`, then starts one Rust scheduler worker for the open app session.
+2. Rust parses the schedule against its IANA timezone, atomically advances `last_run`/`next_run`, appends an audit event, and emits `schedule-fired`.
+3. JS queues the event behind any already-running mission, then creates a normal requirement from the stored text and selected deliverable type.
+4. The mission repeats against the current local records using the same manager and peer-review gates as an ad-hoc mission.
+5. No cron callback invokes an LLM, OfficeCLI process, shell, or arbitrary filesystem path.
 
-**MVP limit:** the desktop app must remain open. KUBERA does not claim background execution after exit.
+**MVP limit:** the desktop app must remain open. KUBERA does not claim background execution after exit, and missed offline occurrences are not replayed as an unbounded backlog.
 
 ## What users see
 
 - **Missions:** input bar, task status, schedule rows, and completion banners.
 - **Workforce:** manager plan, named agent runs, dependency state, accepted handoff badges, retry/cancel where supported.
 - **Reports:** the final PPTX/DOCX/XLSX with Open and Reveal actions.
-- **Records:** read-only client and project source tables.
+- **Records:** local client and project source tables. In desktop mode, the existing client/project forms call typed SQLite create commands with validation, foreign-key checks, and audit events.
 - **Activity:** compact audit and engine events; never a wall of model chat.
 
 ## Definition of a completed mission

@@ -11,9 +11,11 @@ This repository contains the implementation starting point for the KUBERA vertic
 - A running vanilla HTML/CSS/JS interface with Missions, Workforce, Reports, Records, Settings, activity events, and browser-local demo persistence.
 - A source layout prepared for the intended Tauri v2/Rust core.
 - Detailed product, agent, backend, security, and deployment documentation in [`docs/`](docs/).
-- A working deterministic local agent runtime for UI development: it selects business records, produces source-linked analyst handoffs, builds an artifact plan, and validates provenance. It is deliberately separate from the production OpenCode + OfficeCLI bridge.
+- A working deterministic local agent runtime for UI development: it selects business records, produces source-linked analyst handoffs, builds an artifact plan, and validates provenance.
+- A durable desktop P0 source slice: SQLite hydration/restart reconciliation, governed task/run/handoff persistence, loopback OpenCode session/SSE routing, and typed OfficeCLI PPTX generation.
+- A KUBERA-owned OpenCode policy that uses the official free `opencode/deepseek-v4.1-flash-free` model for the bounded manager request. Its lightweight OpenCode alternative is `opencode/glm-5.3-flash-free`; model changes are never silent mid-run.
 
-The Rust/Tauri desktop bridge is scaffolded as source architecture but cannot be compiled in this workspace until the Rust toolchain is installed. See [`docs/setup.md`](docs/setup.md).
+Native Tauri verification still requires a host with the platform GUI dependencies (and a Windows host/runner for the shipping target). See [`docs/setup.md`](docs/setup.md) and [`docs/integration-status.md`](docs/integration-status.md) for the exact source-versus-runtime evidence.
 
 ## Demo prompt
 

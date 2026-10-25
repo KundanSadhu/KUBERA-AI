@@ -6,9 +6,10 @@
   "description": "KUBERA AI local-first business operations workspace",
   "scripts": {
     "dev": "node scripts/serve.mjs",
-    "check": "node --check scripts/serve.mjs && node --check scripts/test-agents.mjs && node --check scripts/test-desktop-api.mjs && node --check src/main.js && node --check src/store.js && node --check src/seed.js && node --check src/formatters.js && node --check src/api.js && node --check src/orchestration.js && node --check src/opencode.js && node --check src/agent-runtime.js && node --check src/tauri-api.js && node --check src/office-contract.js && node --check src/desktop-api.js",
+    "check": "node --check scripts/serve.mjs && node --check scripts/test-agents.mjs && node --check scripts/test-desktop-api.mjs && node --check scripts/test-opencode-policy.mjs && node --check src/main.js && node --check src/store.js && node --check src/seed.js && node --check src/formatters.js && node --check src/api.js && node --check src/orchestration.js && node --check src/opencode.js && node --check src/agent-runtime.js && node --check src/tauri-api.js && node --check src/office-contract.js && node --check src/desktop-api.js",
     "test:agents": "node scripts/test-agents.mjs",
-    "test:desktop": "node scripts/test-desktop-api.mjs"
+    "test:desktop": "node scripts/test-desktop-api.mjs",
+    "test:opencode-policy": "node scripts/test-opencode-policy.mjs"
   },
   "license": "Apache-2.0"
 }

@@ -28,8 +28,11 @@ export function createSeedState() {
     agents: [
       { id: 'agent-manager', name: 'Asha', label: 'Manager', kind: 'manager', capability: 'Plan subagents', status: 'idle', color: 'violet' },
       { id: 'agent-market', name: 'Maya', label: 'Market Analyst', kind: 'analyst', capability: 'Analyze market context', status: 'idle', color: 'blue' },
+      { id: 'agent-market-2', name: 'Maya-2', label: 'Market Analyst', kind: 'analyst', capability: 'Analyze market context', status: 'idle', color: 'blue' },
       { id: 'agent-worker-1', name: 'W-1', label: 'Operations Analyst', kind: 'worker', capability: 'Prepare pipeline metrics', status: 'idle', color: 'teal' },
+      { id: 'agent-worker-1b', name: 'W-1B', label: 'Operations Analyst', kind: 'worker', capability: 'Prepare pipeline metrics', status: 'idle', color: 'teal' },
       { id: 'agent-worker-2', name: 'W-2', label: 'Document Worker', kind: 'worker', capability: 'Create Office artifacts', status: 'idle', color: 'amber' },
+      { id: 'agent-worker-2b', name: 'W-2B', label: 'Document Worker', kind: 'worker', capability: 'Create Office artifacts', status: 'idle', color: 'amber' },
       { id: 'agent-reviewer', name: 'Sentinel', label: 'File Reviewer', kind: 'reviewer', capability: 'Validate output', status: 'idle', color: 'rose' }
     ],
     missions: [
@@ -68,6 +71,9 @@ export function createSeedState() {
         outline: ['Executive overview', 'Pipeline snapshot — $365,000', 'Active opportunities', 'At-risk initiative', 'Recommended actions']
       }
     ],
+    approvals: [],
+    deliveries: [],
+    researchCitations: [],
     templates: [
       { id: 'template-client-q3', name: 'Client Q3 account report', fileName: 'client-q3-account-report.docx', type: 'docx', placeholders: 7, createdAt: ago(10080) }
     ],

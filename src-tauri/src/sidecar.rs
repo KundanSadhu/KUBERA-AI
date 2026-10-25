@@ -12,6 +12,9 @@ use tauri::{AppHandle, Manager};
 
 use crate::models::EngineStatus;
 
+const PRIMARY_FREE_MODEL: &str = "opencode/deepseek-v4.1-flash-free";
+const FALLBACK_FREE_MODEL: &str = "opencode/glm-5.3-flash-free";
+
 pub struct SidecarState {
     child: Mutex<Option<Child>>,
     status: Mutex<EngineStatus>,
@@ -134,33 +137,13 @@ fn prepare_restricted_project_config(root: &Path) -> Result<(), String> {
     // Defense in depth: request-level tools are also disabled in opencode.rs.
     // This project-local configuration prevents a sidecar from inheriting an
     // accidental build-agent profile when it initializes its KUBERA workspace.
-    let config = r#"{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "disabled",
-  "autoupdate": false,
-  "tools": {
-    "bash": false, "read": false, "edit": false, "write": false,
-    "patch": false, "glob": false, "grep": false, "list": false,
-    "webfetch": false, "websearch": false, "task": false,
-    "skill": false, "lsp": false, "todowrite": false, "question": false
-  },
-  "agent": {
-    "plan": {
-      "mode": "primary",
-      "maxSteps": 1,
-      "tools": {
-        "bash": false, "read": false, "edit": false, "write": false,
-        "patch": false, "glob": false, "grep": false, "list": false,
-        "webfetch": false, "websearch": false, "task": false,
-        "skill": false, "lsp": false, "todowrite": false, "question": false
-      },
-      "permission": {
-        "edit": "deny", "bash": "deny", "webfetch": "deny",
-        "external_directory": "deny", "doom_loop": "deny"
-      }
-    }
-  }
-}"#;
+    //
+    // KUBERA deliberately pins the manager to an official OpenCode free model.
+    // `small_model` is a second official free model reserved for lightweight
+    // OpenCode internals. It is not an automatic retry fallback: silently
+    // changing a model during an audited manager run would undermine
+    // reproducibility. A future user-approved model change is a new run.
+    let config = include_str!("../opencode.kubera.json");
     fs::write(root.join("opencode.json"), config).map_err(|error| {
         format!("Could not write restricted KUBERA OpenCode configuration: {error}")
     })
@@ -217,9 +200,11 @@ fn wait_for_health() -> EngineStatus {
                 if payload.healthy {
                     return EngineStatus {
                         state: "ready".into(),
-                        model: "configured by OpenCode".into(),
+                        model: PRIMARY_FREE_MODEL.into(),
                         mode: "desktop".into(),
-                        message: "OpenCode sidecar is healthy on loopback.".into(),
+                        message: format!(
+                            "OpenCode sidecar is healthy on loopback. Free-model policy: primary {PRIMARY_FREE_MODEL}; lightweight fallback {FALLBACK_FREE_MODEL}; no silent mid-run switch."
+                        ),
                         version: payload.version,
                     };
                 }

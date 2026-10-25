@@ -2,8 +2,14 @@ import { createTauriApi, isDesktopRuntime } from './tauri-api.js';
 
 const asTaskStatus = (status) => ({ in_progress: 'running', review: 'review', ready: 'queued' }[status] || status);
 const asDbTaskStatus = (status) => ({ running: 'in_progress', queued: 'ready', succeeded: 'review', approved: 'approved', review: 'review', blocked: 'blocked', failed: 'failed' }[status] || 'blocked');
-const dbAgentId = (id) => id === 'agent-market' ? 'agent-market-analyst' : id;
-const uiAgentId = (id) => id === 'agent-market-analyst' ? 'agent-market' : id;
+const dbAgentId = (id) => ({
+  'agent-market': 'agent-market-analyst',
+  'agent-market-2': 'agent-market-analyst-2'
+}[id] || id);
+const uiAgentId = (id) => ({
+  'agent-market-analyst': 'agent-market',
+  'agent-market-analyst-2': 'agent-market-2'
+}[id] || id);
 
 function sessionIdFrom(session) {
   const id = session?.id || session?.session?.id || session?.data?.id;
@@ -62,7 +68,8 @@ export function createDesktopApi(store) {
     const runId = activeRuns.get(task.id) || completedRuns.get(task.id);
     if (!runId) throw new Error(`No governed agent run exists for handoff task ${task.id}.`);
     const sourceRefs = handoff.payload?.evidenceRecordIds || handoff.payload?.sourceRecordIds || [];
-    const documentTask = mission.tasks.find((candidate) => candidate.agentId === 'agent-worker-2');
+    const documentTask = mission.tasks.find((candidate) => candidate.key === 'document')
+      || mission.tasks.find((candidate) => ['agent-worker-2', 'agent-worker-2b'].includes(candidate.agentId));
     return tauri.recordAgentHandoff({
       requirementId: mission.id,
       taskId: task.id,
@@ -82,10 +89,10 @@ export function createDesktopApi(store) {
     reset: () => store.reset(),
     async bootstrap() {
       const engine = await safe(tauri.startEngine(), { state: 'offline', model: 'not configured', message: 'Desktop engine could not start.' });
-      const [clients, projects, agents, requirements, tasks, handoffs, deliverables, schedules, activity] = await Promise.all([
+      const [clients, projects, agents, requirements, tasks, handoffs, deliverables, deliveries, approvals, templates, schedules, citations, activity] = await Promise.all([
         safe(tauri.listClients(), []), safe(tauri.listProjects(), []), safe(tauri.listAgents(), []),
         safe(tauri.listRequirements(), []), safe(tauri.listTasks(), []), safe(tauri.listAgentHandoffs(), []),
-        safe(tauri.listDeliverables(), []), safe(tauri.listSchedules(), []), safe(tauri.listAuditEvents(), [])
+        safe(tauri.listDeliverables(), []), safe(tauri.listDeliveries(), []), safe(tauri.listDeliverableApprovals(), []), safe(tauri.listTemplates(), []), safe(tauri.listSchedules(), []), safe(tauri.listResearchCitations(), []), safe(tauri.listAuditEvents(), [])
       ]);
       const taskById = new Map(tasks.map((task) => [task.id, task]));
       const missions = requirements.map((requirement) => {
@@ -112,11 +119,31 @@ export function createDesktopApi(store) {
         next.agents = agents.map((agent) => ({ ...agent, id: uiAgentId(agent.id), label: agent.role, capability: (agent.capabilities || []).join(', '), color: agentColor(agent.agentKind) }));
         next.missions = missions;
         next.reports = deliverables.map((report) => ({ ...report, name: report.fileName, type: report.fileType, missionId: taskById.get(report.taskId)?.requirementId || '', size: 'desktop artifact', producer: 'KUBERA desktop runtime', outline: reportOutline(report.fileType), prototype: false }));
-        next.schedules = schedules.map((schedule) => ({ ...schedule, prompt: schedule.requirementText, cron: schedule.cronExpression }));
+        next.approvals = approvals;
+        next.deliveries = deliveries;
+        next.researchCitations = citations;
+        next.templates = templates.map((template) => ({
+          ...template,
+          fileName: template.fileName,
+          type: template.fileType,
+          placeholderNames: template.placeholders || [],
+          placeholders: (template.placeholders || []).length
+        }));
+        next.schedules = schedules.map((schedule) => ({
+          ...schedule,
+          prompt: schedule.requirementText,
+          cron: schedule.cronExpression,
+          type: schedule.deliverableType || 'pptx'
+        }));
         next.activity = activity.map((event) => ({ id: String(event.id), at: event.createdAt, kind: event.action, tone: 'neutral', text: event.detail || `${event.actor}: ${event.action}` }));
       });
       return store.getState();
     },
+    createClient(input) { return tauri.createClient(input); },
+    updateClient(clientId, input) { return tauri.updateClient(clientId, input); },
+    createProject(input) { return tauri.createProject(input); },
+    importProjectsCsv(input) { return tauri.importProjectsCsv(input); },
+    updateProject(projectId, input) { return tauri.updateProject(projectId, input); },
     persistRequirement(mission) {
       return tauri.createRequirement(mission.text, mission.type, mission.id);
     },
@@ -162,7 +189,33 @@ export function createDesktopApi(store) {
       }
     },
     createPptxDeck(request) { return tauri.createPptxDeck(request); },
-    subscribeOpenCodeEvents(listener) { return tauri.subscribeOpenCodeEvents(listener); }
+    createDocxDocument(request) { return tauri.createDocxDocument(request); },
+    createTemplatedDocx(request) { return tauri.createTemplatedDocx(request); },
+    createXlsxWorkbook(request) { return tauri.createXlsxWorkbook(request); },
+    sendApprovedDelivery(input) { return tauri.sendApprovedDelivery(input); },
+    requestDeliverableApproval(deliverableId) { return tauri.requestDeliverableApproval(deliverableId); },
+    decideDeliverableApproval(approvalId, input) { return tauri.decideDeliverableApproval(approvalId, input); },
+    openDeliverable(deliverableId) { return tauri.openDeliverable(deliverableId); },
+    revealDeliverable(deliverableId) { return tauri.revealDeliverable(deliverableId); },
+    previewDeliverable(deliverableId) { return tauri.previewDeliverable(deliverableId); },
+    previewDeliverableVisual(deliverableId) { return tauri.previewDeliverableVisual(deliverableId); },
+    importTemplate(input) { return tauri.importTemplate(input); },
+    importTemplateBundle(input) { return tauri.importTemplateBundle(input); },
+    exportTemplateBundle(templateId) { return tauri.exportTemplateBundle(templateId); },
+    searchApprovedResearch(input) { return tauri.searchApprovedResearch(input); },
+    persistSchedule(schedule) {
+      return tauri.createSchedule({
+        id: schedule.id,
+        requirementText: schedule.prompt,
+        cronExpression: schedule.cron,
+        timezone: schedule.timezone,
+        deliverableType: schedule.type
+      });
+    },
+    persistScheduleEnabled(schedule) { return tauri.setScheduleEnabled(schedule.id, schedule.enabled); },
+    startScheduler() { return tauri.startScheduler(); },
+    subscribeOpenCodeEvents(listener) { return tauri.subscribeOpenCodeEvents(listener); },
+    subscribeScheduleEvents(listener) { return tauri.subscribeScheduleEvents(listener); }
   };
 }
 

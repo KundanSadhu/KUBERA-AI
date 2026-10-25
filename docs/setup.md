@@ -38,7 +38,7 @@ The production architecture requires the following on the target host:
   - **macOS:** Xcode Command Line Tools
   - **Windows:** Microsoft C++ Build Tools and WebView2 Runtime
   - **Linux:** WebKitGTK and Tauri system packages for the selected distribution
-- An OpenAI-compatible provider endpoint/key, or a reachable local Ollama instance
+- An OpenCode account/session if the selected availability-limited OpenCode free model asks for authentication; KUBERA does not require an OpenAI-compatible endpoint or a general-purpose local model
 
 Verify installation:
 
@@ -48,7 +48,7 @@ cargo --version
 cargo tauri --version
 ```
 
-> The current Arena workspace exposes Node but not a Rust toolchain. The UI source can be developed and tested here; compile the Tauri core on a machine with Rust installed.
+> The current Arena workspace can format/parse the Rust sources, but lacks the GTK/GDK native libraries required for a Linux Tauri build and the MSVC linker required for a Windows cross-build. Use a platform-ready host or the Windows GitHub Actions runner for native validation.
 
 ## 3. Sidecar installation
 
@@ -71,18 +71,33 @@ Before building UI integrations, manually verify on the target OS:
 
 Do not proceed to end-to-end development if these proofs fail.
 
-## 4. Provider configuration
+## 4. OpenCode free-model configuration
 
-The Settings screen accepts:
+KUBERA owns the OpenCode project configuration at runtime; the checked-in policy is [`src-tauri/opencode.kubera.json`](../src-tauri/opencode.kubera.json). It uses the official OpenCode provider rather than a direct third-party API client:
 
-| Setting | Example | Notes |
+| Role | Model | Policy |
 |---|---|---|
-| Provider base URL | `https://api.example.com/v1` | OpenAI-compatible endpoint |
-| Model | `gpt-4o-mini` or local model name | Must support the required tool/JSON behavior |
-| API key | masked | Never send to prompts/audit/activity logs |
-| Timezone | `Asia/Calcutta` | Used to display schedule next runs |
+| Governed manager / agentic reasoning | `opencode/deepseek-v4.1-flash-free` | Explicitly selected both in the sidecar configuration and in each HTTP prompt request |
+| Lightweight OpenCode work | `opencode/glm-5.3-flash-free` | Reserved by `small_model`; it is not a silent retry path for a manager run |
 
-Production should store the API key in OS credential storage or Tauri Stronghold. A plain app-data config file is not acceptable for a production secret.
+Free-model availability can rotate or be rate-limited. If the primary model is unavailable, KUBERA records a failed governed run instead of switching providers or models without an auditable user decision. Start a new run after a user-approved policy change.
+
+If OpenCode requests authentication for its free-service endpoint, complete that authentication through the official OpenCode flow for the desktop user's account. Do not paste provider secrets into a requirement, model prompt, audit event, or `opencode.kubera.json`; a future credential-settings surface must use OS credential storage or Tauri Stronghold.
+
+The sidecar remains loopback-only and denies every general shell, filesystem, browser/web, nested-agent, skill, and MCP-style tool. KUBERA’s typed SQLite and OfficeCLI commands remain the only paths to governed local records and files.
+
+### Approved DOCX templates
+
+Desktop template import copies a user-selected `.docx`, `.xlsx`, or `.pptx` into KUBERA's local template root after a 4 MiB limit and OOXML package check. DOCX import records `{{placeholder}}` tokens without exposing a source path. During a document-worker merge, values must exactly match the inspected token set. The manager workflow currently supports these trusted report tokens: `{{client_name}}`, `{{project_count}}`, `{{pipeline_value}}`, `{{at_risk_count}}`, `{{requirement}}`, and `{{report_title}}`. Keep each token in one Word text run; split Word runs are rejected rather than merged ambiguously.
+
+### Explicit approved delivery
+
+KUBERA never stores outbound credentials in SQLite or exposes them to OpenCode, agents, or the renderer. A user must first approve a registered artifact in the Report Center and then deliberately select a delivery channel.
+
+- **SMTP email attachment:** set `KUBERA_SMTP_HOST`, `KUBERA_SMTP_PORT` (optional; defaults to `587`), `KUBERA_SMTP_USERNAME`, `KUBERA_SMTP_PASSWORD`, and `KUBERA_SMTP_FROM` in the desktop host environment.
+- **Slack file upload:** set `KUBERA_SLACK_BOT_TOKEN` in the desktop host environment. The user must enter a Slack channel ID (`C…`, `G…`, or `D…`) in the delivery form. The bot needs permission to upload files to that destination.
+
+KUBERA records only delivery metadata and state. It never records SMTP passwords, Slack tokens, provider diagnostics, or arbitrary webhook URLs. Delivery remains a target-host acceptance gate until credentials and provider policy are verified.
 
 ## 5. Run the future desktop app
 

@@ -15,6 +15,12 @@ use std::{
 use tauri::{AppHandle, Emitter};
 
 const BASE_URL: &str = "http://127.0.0.1:4096";
+// These values deliberately match the KUBERA-owned OpenCode project config.
+// Repeating the primary model at the HTTP boundary prevents an inherited
+// OpenCode session preference from silently selecting a paid or ungoverned
+// provider.
+const FREE_MODEL_PROVIDER: &str = "opencode";
+const PRIMARY_FREE_MODEL: &str = "deepseek-v4.1-flash-free";
 
 pub struct EventForwarder {
     started: AtomicBool,
@@ -69,13 +75,19 @@ pub fn send_message(session_id: &str, text: &str) -> Result<Value, String> {
     if session_id.trim().is_empty() || text.trim().is_empty() {
         return Err("OpenCode session ID and message text are required.".into());
     }
-    // KUBERA uses OpenCode as a text-only reasoning sidecar. Tool calls are
-    // disabled at the server request boundary rather than merely prohibited in
-    // the prompt, including shell, edits, reads, browsing, skills, and nested
-    // agent creation. The desktop runtime retains its own typed SQLite/Office
-    // commands for every governed operation.
+    // KUBERA uses OpenCode's official free model as a text-only reasoning
+    // sidecar. Tool calls are disabled at the server request boundary rather
+    // than merely prohibited in the prompt, including shell, edits, reads,
+    // browsing, skills, and nested agent creation. The desktop runtime retains
+    // its own typed SQLite/Office commands for every governed operation.
+    //
+    // If this availability-limited free model is unavailable, fail the run and
+    // preserve the reason in its audit summary. Do not silently retry another
+    // model mid-run; any user-approved model change must create a new governed
+    // session.
     let body = json!({
         "agent": "plan",
+        "model": { "providerID": FREE_MODEL_PROVIDER, "modelID": PRIMARY_FREE_MODEL },
         "tools": {
             "bash": false, "read": false, "edit": false, "write": false,
             "patch": false, "glob": false, "grep": false, "list": false,

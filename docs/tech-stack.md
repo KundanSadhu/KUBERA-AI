@@ -9,7 +9,7 @@
 | Agent runtime | OpenCode in serve mode | Headless session API and streaming events through a locally bundled sidecar |
 | Office artifacts | OfficeCLI | Constrained creation/merge/render surface without an Office installation |
 | Persistence | SQLite via `rusqlite` with `bundled` feature | Local-first, zero external DB configuration |
-| Scheduler | `tokio-cron-scheduler` or validated equivalent | Async cron jobs while desktop app is running |
+| Scheduler | `cron` + `chrono-tz` in a bounded Rust worker | IANA-timezone recurring missions while the desktop app is open; each tick persists before emitting |
 | Process control | `tauri-plugin-shell` | Launch known external sidecars with minimal capability grants |
 | Local UI preview | Node static server | Lets UI develop before a Rust/Tauri host is available |
 | Icons/fonts | Inline SVG and system fonts | No asset pipeline or CDN dependency |
@@ -43,11 +43,10 @@ src/
 | `tauri` v2 | Desktop runtime |
 | `tauri-plugin-shell` | Bundled sidecar lifecycle |
 | `rusqlite` with `bundled` | SQLite storage |
-| `tokio` | Async runtime |
-| `tokio-cron-scheduler` | Cron jobs |
+| `cron` | Cron expression parsing and next-occurrence calculation |
+| `chrono`, `chrono-tz` | IANA timezone-safe schedule calculation |
 | `serde`, `serde_json` | Command/data serialization |
 | `uuid` | Stable IDs |
-| `chrono`, `chrono-tz` | Time handling and display support |
 | `reqwest` | Local sidecar health polling |
 | `thiserror` or `anyhow` | Error boundaries |
 
