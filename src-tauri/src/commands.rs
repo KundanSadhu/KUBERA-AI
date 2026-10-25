@@ -1193,7 +1193,7 @@ fn slack_api_response(response: reqwest::blocking::Response) -> Result<serde_jso
     let value: serde_json::Value =
         serde_json::from_slice(&payload).map_err(|_| "Slack API returned an invalid response.")?;
     if value.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-        return Err("Slack API rejected the approved delivery request.");
+        return Err("Slack API rejected the approved delivery request.".into());
     }
     Ok(value)
 }

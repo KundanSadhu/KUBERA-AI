@@ -81,7 +81,7 @@ pub fn preview_outline(paths: &AppPaths, report: &Path) -> Result<(String, bool)
         .stdout
         .take()
         .ok_or_else(|| "Could not capture the OfficeCLI preview stream.".to_string())?;
-    let reader = thread::spawn(move || {
+    let reader = thread::spawn(move || -> std::io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
         let mut buffer = [0_u8; 8_192];
         loop {
