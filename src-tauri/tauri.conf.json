@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "ai.kubera.desktop",
   "build": {
-    "beforeDevCommand": "npm --prefix .. run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:4173",
-    "beforeBuildCommand": "npm --prefix .. run check",
+    "beforeBuildCommand": "npm run check",
     "frontendDist": "../src"
   },
   "app": {
